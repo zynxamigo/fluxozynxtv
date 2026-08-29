@@ -1,26 +1,21 @@
 # FluxoZynxTV
 
-Player IPTV moderno com **TV ao Vivo**, **Filmes**, **Séries**, **Continuar Assistindo** e **Assistir Depois**.
+Player IPTV com visual inspirado na Netflix — limpo, cinematográfico e rápido.
 
 ## Funcionalidades
 
-- 📺 TV ao Vivo
-- 🎬 Filmes e Séries (separados automaticamente)
-- ⏯️ Continuar Assistindo (salva onde você parou)
-- 🔖 Assistir Depois
-- 📂 Carregar playlist M3U / M3U8
-- 🔍 Busca rápida
-- 💾 Dados salvos no navegador
-- 📱 Responsivo
+- Visual estilo Netflix (hero, rows, cards com hover)
+- TV ao Vivo / Filmes / Séries
+- Continuar Assistindo (salva o progresso)
+- Minha Lista (Assistir Depois)
+- Carregar playlist M3U/M3U8
+- Busca
+- Dados salvos no navegador
 
-## Como publicar (GitHub Pages)
+## Publicar no GitHub Pages
 
-1. Vá em **Settings → Pages**
-2. Source: branch `main` + pasta `/ (root)`
-3. Salve e aguarde 1–2 minutos
+1. Settings → Pages
+2. Source: `main` / root
+3. Site: https://zynxamigo.github.io/fluxozynxtv/
 
-Site: **https://zynxamigo.github.io/fluxozynxtv/**
-
-## Aviso
-
-Use apenas playlists de conteúdo legítimo.
+Use apenas conteúdo legítimo.
