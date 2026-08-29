@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FluxoZynxTV - IPTV Player</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7"></script>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="logo">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="7" width="20" height="15" rx="2"/>
+          <polyline points="17 2 12 7 7 2"/>
+        </svg>
+        <span>FluxoZynxTV</span>
+      </div>
+
+      <nav class="main-tabs" id="mainTabs">
+        <button class="tab-btn active" data-tab="live">TV ao Vivo</button>
+        <button class="tab-btn" data-tab="movies">Filmes</button>
+        <button class="tab-btn" data-tab="series">Séries</button>
+        <button class="tab-btn" data-tab="continue">Continuar</button>
+        <button class="tab-btn" data-tab="watchlater">Assistir Depois</button>
+      </nav>
+
+      <div class="header-actions">
+        <div class="search-box">
+          <input type="text" id="searchInput" placeholder="Buscar..." autocomplete="off">
+          <svg class="search-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="m21 21-4.35-4.35"/>
+          </svg>
+        </div>
+        <button class="btn-playlist" id="btnPlaylist" title="Carregar playlist M3U">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+            <line x1="12" y1="18" x2="12" y2="12"/>
+            <line x1="9" y1="15" x2="15" y2="15"/>
+          </svg>
+          <span>Carregar M3U</span>
+        </button>
+        <input type="file" id="m3uFile" accept=".m3u,.m3u8" hidden>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="player-section" id="playerSection">
+        <div class="player-wrapper">
+          <video id="video" controls playsinline></video>
+          <div class="player-overlay" id="playerOverlay">
+            <div class="overlay-content">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              <p>Selecione um conteúdo para assistir</p>
+            </div>
+          </div>
+          <div class="now-playing" id="nowPlaying">
+            <div class="now-info">
+              <span class="channel-name" id="currentTitle">—</span>
+              <span class="channel-type" id="currentType"></span>
+            </div>
+            <button class="btn-watchlater" id="btnWatchLater" title="Assistir depois">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <aside class="sidebar">
+        <div class="categories" id="categories"></div>
+        <div class="channels-list" id="channelsList">
+          <p class="empty-msg">Carregue uma playlist M3U para começar</p>
+        </div>
+      </aside>
+    </main>
+
+    <footer class="footer">
+      <p>FluxoZynxTV • Progresso e listas salvos no seu navegador • Use apenas conteúdo legítimo</p>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
