@@ -7,86 +7,87 @@
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Netflix+Sans:wght@300;400;500;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7"></script>
 </head>
 <body>
   <div class="app">
-    <!-- NAV -->
-    <nav class="nav" id="nav">
-      <div class="nav-left">
-        <a href="#" class="logo" id="logoHome">FLUXO<span>ZYNX</span>TV</a>
-        <ul class="nav-links">
-          <li><button class="nav-link active" data-tab="home">Início</button></li>
-          <li><button class="nav-link" data-tab="live">TV ao Vivo</button></li>
-          <li><button class="nav-link" data-tab="movies">Filmes</button></li>
-          <li><button class="nav-link" data-tab="series">Séries</button></li>
-          <li><button class="nav-link" data-tab="continue">Continuar</button></li>
-          <li><button class="nav-link" data-tab="watchlater">Minha Lista</button></li>
-        </ul>
-      </div>
-      <div class="nav-right">
-        <div class="search-wrap">
-          <button class="icon-btn" id="btnSearchToggle" title="Buscar">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-          </button>
-          <input type="text" id="searchInput" class="search-input" placeholder="Títulos, canais..." autocomplete="off">
+
+    <!-- NAVBAR -->
+    <nav class="navbar" id="navbar">
+      <div class="nav-inner">
+        <a class="logo" id="logoHome" href="#">FLUXO<span>ZYNX</span>TV</a>
+
+        <div class="nav-links" id="navLinks">
+          <button class="nav-btn active" data-tab="home">Início</button>
+          <button class="nav-btn" data-tab="live">TV ao Vivo</button>
+          <button class="nav-btn" data-tab="movies">Filmes</button>
+          <button class="nav-btn" data-tab="series">Séries</button>
+          <button class="nav-btn" data-tab="continue">Continuar</button>
+          <button class="nav-btn" data-tab="watchlater">Minha Lista</button>
         </div>
-        <button class="icon-btn" id="btnPlaylist" title="Carregar M3U">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-        </button>
-        <input type="file" id="m3uFile" accept=".m3u,.m3u8" hidden>
+
+        <div class="nav-actions">
+          <div class="search-box" id="searchBox">
+            <button class="icon-btn" id="btnSearch" type="button">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </button>
+            <input type="text" id="searchInput" placeholder="Títulos, canais..." autocomplete="off">
+          </div>
+          <button class="icon-btn" id="btnPlaylist" type="button" title="Carregar M3U">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          </button>
+          <input type="file" id="m3uFile" accept=".m3u,.m3u8" hidden>
+        </div>
       </div>
     </nav>
 
     <!-- HERO -->
-    <section class="hero" id="hero">
-      <div class="hero-bg" id="heroBg"></div>
-      <div class="hero-gradient"></div>
-      <div class="hero-content">
-        <p class="hero-badge" id="heroBadge">Destaque</p>
+    <header class="hero" id="hero">
+      <div class="hero-image" id="heroImage"></div>
+      <div class="hero-shade"></div>
+      <div class="hero-body">
+        <span class="hero-tag" id="heroTag">Destaque</span>
         <h1 class="hero-title" id="heroTitle">Carregue sua playlist</h1>
-        <p class="hero-desc" id="heroDesc">Importe um arquivo M3U e comece a assistir TV ao vivo, filmes e séries com qualidade de cinema.</p>
-        <div class="hero-actions">
-          <button class="btn-play" id="heroPlay">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        <p class="hero-text" id="heroText">Importe um arquivo M3U e comece a assistir TV ao vivo, filmes e séries.</p>
+        <div class="hero-btns">
+          <button class="btn-white" id="heroPlay" type="button">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
             Assistir
           </button>
-          <button class="btn-info" id="heroLater">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+          <button class="btn-gray" id="heroLater" type="button">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
             Minha Lista
           </button>
         </div>
       </div>
-    </section>
+    </header>
 
     <!-- ROWS -->
-    <main class="content" id="content">
-      <div id="rowsContainer"></div>
+    <main class="main" id="main">
+      <div id="rows"></div>
     </main>
 
-    <!-- PLAYER MODAL -->
-    <div class="player-modal" id="playerModal">
-      <div class="player-container">
-        <button class="player-close" id="playerClose" title="Fechar">
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-        </button>
+    <!-- PLAYER OVERLAY -->
+    <div class="player-overlay" id="playerOverlay" hidden>
+      <div class="player-box">
+        <button class="player-x" id="playerClose" type="button">&times;</button>
         <video id="video" controls playsinline></video>
-        <div class="player-info">
-          <h2 id="playerTitle">—</h2>
-          <span id="playerMeta"></span>
-          <button class="btn-mini" id="btnWatchLater">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
-            Minha Lista
-          </button>
+        <div class="player-bar">
+          <div>
+            <h2 id="playerTitle">—</h2>
+            <p id="playerMeta"></p>
+          </div>
+          <button class="btn-gray btn-sm" id="btnLaterPlayer" type="button">Minha Lista</button>
         </div>
       </div>
     </div>
 
     <footer class="footer">
-      <p>FluxoZynxTV • Progresso salvo no navegador • Use apenas conteúdo legítimo</p>
+      FluxoZynxTV · Progresso salvo no navegador · Use apenas conteúdo legítimo
     </footer>
   </div>
+
   <script src="script.js"></script>
 </body>
 </html>
