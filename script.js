@@ -1,22 +1,22 @@
-const KEY = 'fluxozynxtv_v4';
+/* FluxoZynxTV - sem demos; carrega só a sua lista */
+const KEY = 'fluxozynxtv_v5';
 
-const demos = [
-  { id:'d1', name:'Big Buck Bunny', logo:'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Big_buck_bunny_poster_big.jpg/440px-Big_buck_bunny_poster_big.jpg', url:'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8', group:'Destaques', type:'movie' },
-  { id:'d2', name:'Sintel', logo:'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Sintel_poster.jpg/440px-Sintel_poster.jpg', url:'https://bitdash-a.akamaihd.net/content/sintel/hls/playlist.m3u8', group:'Destaques', type:'movie' },
-  { id:'d3', name:'Tears of Steel', logo:'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6c/Tears_of_Steel_poster.jpg/440px-Tears_of_Steel_poster.jpg', url:'https://demo.unified-streaming.com/k8s/features/stable/video/tears-of-steel/tears-of-steel.ism/.m3u8', group:'Destaques', type:'movie' },
-  { id:'d4', name:'Apple HLS Test', logo:'', url:'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8', group:'Demo Live', type:'live' }
-];
-
-function load() {
+function loadStore() {
   try {
     const r = localStorage.getItem(KEY);
-    if (r) return JSON.parse(r);
+    if (r) {
+      const d = JSON.parse(r);
+      if (!Array.isArray(d.channels)) d.channels = [];
+      return d;
+    }
   } catch (e) {}
-  return { channels: [...demos], progress: {}, later: [], last: null, xtream: null };
+  return { channels: [], progress: {}, later: [], last: null, xtream: null };
 }
-function save() { localStorage.setItem(KEY, JSON.stringify(store)); }
+function saveStore() {
+  try { localStorage.setItem(KEY, JSON.stringify(store)); } catch (e) {}
+}
 
-let store = load();
+let store = loadStore();
 let tab = 'home';
 let current = null;
 let hls = null;
@@ -30,6 +30,7 @@ const heroTitle = $('heroTitle');
 const heroText = $('heroText');
 const heroPlay = $('heroPlay');
 const heroLater = $('heroLater');
+const heroLoad = $('heroLoad');
 const rows = $('rows');
 const playerOverlay = $('playerOverlay');
 const video = $('video');
@@ -70,11 +71,10 @@ $('btnSearch').addEventListener('click', () => {
 });
 searchInput.addEventListener('input', () => render());
 
-/* ===== LOAD MODAL ===== */
+/* ===== MODAL ===== */
 function openLoad() {
   loadModal.hidden = false;
   setStatus('');
-  // restore xtream fields if saved
   if (store.xtream) {
     $('xtHost').value = store.xtream.host || '';
     $('xtUser').value = store.xtream.user || '';
@@ -84,7 +84,7 @@ function openLoad() {
 function closeLoad() { loadModal.hidden = true; }
 
 $('btnOpenLoad').addEventListener('click', openLoad);
-$('heroLoad').addEventListener('click', openLoad);
+heroLoad.addEventListener('click', openLoad);
 $('loadClose').addEventListener('click', closeLoad);
 loadModal.addEventListener('click', (e) => { if (e.target === loadModal) closeLoad(); });
 
@@ -93,8 +93,8 @@ document.querySelectorAll('.load-tab').forEach((t) => {
     document.querySelectorAll('.load-tab').forEach((x) => x.classList.remove('active'));
     document.querySelectorAll('.load-panel').forEach((x) => x.classList.remove('active'));
     t.classList.add('active');
-    const panel = t.dataset.load === 'file' ? 'panelFile' : t.dataset.load === 'url' ? 'panelUrl' : 'panelXtream';
-    $(panel).classList.add('active');
+    const map = { file: 'panelFile', paste: 'panelPaste', url: 'panelUrl', xtream: 'panelXtream' };
+    $(map[t.dataset.load]).classList.add('active');
     setStatus('');
   });
 });
@@ -106,21 +106,23 @@ function setStatus(msg, type) {
   loadStatus.className = 'load-status ' + (type || 'info');
 }
 
-/* File */
+/* Arquivo */
 const fileDrop = $('fileDrop');
 const m3uFile = $('m3uFile');
 fileDrop.addEventListener('click', () => m3uFile.click());
 m3uFile.addEventListener('change', (e) => {
-  const f = e.target.files[0];
+  const f = e.target.files && e.target.files[0];
   if (f) readFile(f);
   e.target.value = '';
 });
-fileDrop.addEventListener('dragover', (e) => { e.preventDefault(); fileDrop.classList.add('drag'); });
+['dragover', 'dragenter'].forEach((ev) => {
+  fileDrop.addEventListener(ev, (e) => { e.preventDefault(); fileDrop.classList.add('drag'); });
+});
 fileDrop.addEventListener('dragleave', () => fileDrop.classList.remove('drag'));
 fileDrop.addEventListener('drop', (e) => {
   e.preventDefault();
   fileDrop.classList.remove('drag');
-  const f = e.dataTransfer.files[0];
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
   if (f) readFile(f);
 });
 
@@ -128,70 +130,136 @@ function readFile(file) {
   setStatus('Lendo arquivo...', 'info');
   const reader = new FileReader();
   reader.onload = (ev) => {
-    const parsed = parseM3U(ev.target.result);
-    applyPlaylist(parsed, 'arquivo');
+    try {
+      const parsed = parseM3U(String(ev.target.result || ''));
+      applyPlaylist(parsed, 'arquivo');
+    } catch (err) {
+      setStatus('Erro ao processar o arquivo', 'err');
+    }
   };
-  reader.onerror = () => setStatus('Erro ao ler o arquivo', 'err');
+  reader.onerror = () => setStatus('Não foi possível ler o arquivo', 'err');
   reader.readAsText(file);
 }
 
-/* URL */
+/* Colar */
+$('btnLoadPaste').addEventListener('click', () => {
+  const text = $('pasteInput').value.trim();
+  if (!text) { setStatus('Cole o texto da playlist', 'err'); return; }
+  const parsed = parseM3U(text);
+  applyPlaylist(parsed, 'texto');
+});
+
+/* URL com proxies */
 $('btnLoadUrl').addEventListener('click', loadFromUrl);
 $('urlInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') loadFromUrl(); });
 
+async function fetchText(url) {
+  const attempts = [
+    url,
+    'https://corsproxy.io/?' + encodeURIComponent(url),
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(url)
+  ];
+  let lastErr = null;
+  for (const u of attempts) {
+    try {
+      const res = await fetch(u, { method: 'GET' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const text = await res.text();
+      if (text && text.length > 10) return text;
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('Falha no download');
+}
+
 async function loadFromUrl() {
   let url = $('urlInput').value.trim();
-  if (!url) { setStatus('Cole um link válido', 'err'); return; }
-  if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+  if (!url) { setStatus('Cole um link', 'err'); return; }
+  if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
 
   setStatus('Baixando playlist...', 'info');
   $('btnLoadUrl').disabled = true;
   try {
-    const res = await fetch(url);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const text = await res.text();
+    const text = await fetchText(url);
     const parsed = parseM3U(text);
     applyPlaylist(parsed, 'link');
   } catch (err) {
-    setStatus('Falha ao baixar. O servidor pode bloquear (CORS). Tente baixar o arquivo e usar a aba Arquivo.', 'err');
+    setStatus('Não deu para baixar o link (bloqueio do servidor). Baixe o .m3u e use Arquivo ou Colar.', 'err');
   }
   $('btnLoadUrl').disabled = false;
 }
 
 /* Xtream */
 $('btnLoadXtream').addEventListener('click', loadXtream);
+$('btnXtreamM3U').addEventListener('click', () => {
+  const creds = readXtreamFields();
+  if (!creds) return;
+  const m3u = creds.host + '/get.php?username=' + encodeURIComponent(creds.user) +
+    '&password=' + encodeURIComponent(creds.pass) + '&type=m3u_plus&output=ts';
+  setStatus('Link gerado. Abrindo em nova aba — salve o arquivo e use a aba Arquivo.', 'info');
+  window.open(m3u, '_blank');
+});
 
-async function loadXtream() {
+function readXtreamFields() {
   let host = $('xtHost').value.trim().replace(/\/$/, '');
   const user = $('xtUser').value.trim();
   const pass = $('xtPass').value.trim();
   if (!host || !user || !pass) {
     setStatus('Preencha servidor, usuário e senha', 'err');
-    return;
+    return null;
   }
   if (!/^https?:\/\//i.test(host)) host = 'http://' + host;
+  return { host, user, pass };
+}
 
+async function fetchJsonAny(url) {
+  const text = await fetchText(url);
+  return JSON.parse(text);
+}
+
+async function loadXtream() {
+  const creds = readXtreamFields();
+  if (!creds) return;
+  const { host, user, pass } = creds;
   const getLive = $('xtLive').checked;
   const getVod = $('xtVod').checked;
   const getSeries = $('xtSeries').checked;
 
-  setStatus('Conectando ao servidor...', 'info');
+  setStatus('Conectando...', 'info');
   $('btnLoadXtream').disabled = true;
 
   try {
-    // Player API auth
+    // 1) Tenta playlist M3U completa (mais compatível)
+    setStatus('Tentando baixar M3U do painel...', 'info');
+    const m3uUrl = host + '/get.php?username=' + encodeURIComponent(user) +
+      '&password=' + encodeURIComponent(pass) + '&type=m3u_plus&output=ts';
+    try {
+      const text = await fetchText(m3uUrl);
+      const parsed = parseM3U(text);
+      if (parsed.length) {
+        store.xtream = { host, user, pass };
+        applyPlaylist(parsed, 'Xtream M3U');
+        $('btnLoadXtream').disabled = false;
+        return;
+      }
+    } catch (e) { /* tenta API */ }
+
+    // 2) Player API
+    setStatus('Conectando via API...', 'info');
     const authUrl = host + '/player_api.php?username=' + encodeURIComponent(user) + '&password=' + encodeURIComponent(pass);
-    const authRes = await fetch(authUrl);
-    if (!authRes.ok) throw new Error('Servidor inacessível');
-    const auth = await authRes.json();
-    if (!auth.user_info || auth.user_info.auth === 0) throw new Error('Login inválido');
+    const auth = await fetchJsonAny(authUrl);
+    if (!auth.user_info || Number(auth.user_info.auth) === 0) {
+      throw new Error('Usuário ou senha inválidos');
+    }
 
     const all = [];
+    const q = 'username=' + encodeURIComponent(user) + '&password=' + encodeURIComponent(pass);
 
     if (getLive) {
-      setStatus('Carregando canais ao vivo...', 'info');
-      const liveCats = await fetchJson(host + '/player_api.php?username=' + encodeURIComponent(user) + '&password=' + encodeURIComponent(pass) + '&action=get_live_categories');
-      const liveStreams = await fetchJson(host + '/player_api.php?username=' + encodeURIComponent(user) + '&password=' + encodeURIComponent(pass) + '&action=get_live_streams');
+      setStatus('Carregando canais...', 'info');
+      const liveCats = await fetchJsonAny(host + '/player_api.php?' + q + '&action=get_live_categories').catch(() => []);
+      const liveStreams = await fetchJsonAny(host + '/player_api.php?' + q + '&action=get_live_streams');
       const catMap = mapCats(liveCats);
       (liveStreams || []).forEach((s) => {
         all.push({
@@ -207,11 +275,11 @@ async function loadXtream() {
 
     if (getVod) {
       setStatus('Carregando filmes...', 'info');
-      const vodCats = await fetchJson(host + '/player_api.php?username=' + encodeURIComponent(user) + '&password=' + encodeURIComponent(pass) + '&action=get_vod_categories');
-      const vodStreams = await fetchJson(host + '/player_api.php?username=' + encodeURIComponent(user) + '&password=' + encodeURIComponent(pass) + '&action=get_vod_streams');
+      const vodCats = await fetchJsonAny(host + '/player_api.php?' + q + '&action=get_vod_categories').catch(() => []);
+      const vodStreams = await fetchJsonAny(host + '/player_api.php?' + q + '&action=get_vod_streams');
       const catMap = mapCats(vodCats);
       (vodStreams || []).forEach((s) => {
-        const ext = (s.container_extension || 'mp4');
+        const ext = s.container_extension || 'mp4';
         all.push({
           id: 'vod_' + s.stream_id,
           name: s.name || 'Filme',
@@ -225,40 +293,36 @@ async function loadXtream() {
 
     if (getSeries) {
       setStatus('Carregando séries...', 'info');
-      const serCats = await fetchJson(host + '/player_api.php?username=' + encodeURIComponent(user) + '&password=' + encodeURIComponent(pass) + '&action=get_series_categories');
-      const seriesList = await fetchJson(host + '/player_api.php?username=' + encodeURIComponent(user) + '&password=' + encodeURIComponent(pass) + '&action=get_series');
+      const serCats = await fetchJsonAny(host + '/player_api.php?' + q + '&action=get_series_categories').catch(() => []);
+      const seriesList = await fetchJsonAny(host + '/player_api.php?' + q + '&action=get_series');
       const catMap = mapCats(serCats);
-      // series need extra call per show for episodes — load first episode link pattern or skip deep
-      // For performance, store series as entries pointing to series info; play fetches episodes
-      for (const s of (seriesList || []).slice(0, 500)) {
+      (seriesList || []).slice(0, 800).forEach((s) => {
         all.push({
           id: 'ser_' + s.series_id,
           name: s.name || 'Série',
           logo: s.cover || '',
           group: catMap[s.category_id] || 'Séries',
           type: 'series',
-          url: '', // filled on play
+          url: '',
           seriesId: s.series_id,
           xtHost: host,
           xtUser: user,
           xtPass: pass
         });
-      }
+      });
     }
 
     store.xtream = { host, user, pass };
-    applyPlaylist(all, 'Xtream');
+    applyPlaylist(all, 'Xtream API');
   } catch (err) {
     console.error(err);
-    setStatus('Erro: ' + (err.message || 'falha na conexão. Verifique DNS/usuário/senha ou CORS.'), 'err');
+    setStatus(
+      (err && err.message ? err.message + '. ' : '') +
+      'Se continuar falhando: use "Gerar link M3U", baixe o arquivo e carregue na aba Arquivo.',
+      'err'
+    );
   }
   $('btnLoadXtream').disabled = false;
-}
-
-async function fetchJson(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('HTTP ' + res.status);
-  return res.json();
 }
 
 function mapCats(arr) {
@@ -269,24 +333,20 @@ function mapCats(arr) {
 
 function applyPlaylist(parsed, source) {
   if (!parsed || !parsed.length) {
-    setStatus('Nenhum item encontrado na lista', 'err');
+    setStatus('Nenhum canal/filme encontrado nessa lista', 'err');
     return;
   }
   store.channels = parsed;
-  save();
-  setStatus(parsed.length + ' itens carregados via ' + source + '!', 'ok');
+  saveStore();
+  setStatus(parsed.length + ' itens carregados (' + source + ')!', 'ok');
   tab = 'home';
   document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === 'home'));
-  setTimeout(() => { closeLoad(); render(); }, 800);
+  setTimeout(() => { closeLoad(); render(); }, 600);
 }
 
-/* hero / player */
-heroPlay.addEventListener('click', () => {
-  if (current) play(current);
-  else openLoad();
-});
+/* player */
+heroPlay.addEventListener('click', () => { if (current) play(current); else openLoad(); });
 heroLater.addEventListener('click', () => { if (current) toggleLater(current.id); });
-
 $('playerClose').addEventListener('click', closePlayer);
 playerOverlay.addEventListener('click', (e) => { if (e.target === playerOverlay) closePlayer(); });
 btnLaterPlayer.addEventListener('click', () => { if (current) toggleLater(current.id); });
@@ -310,19 +370,28 @@ document.addEventListener('keydown', (e) => {
 
 render();
 
-/* ========== RENDER ========== */
+/* RENDER */
 function render() {
   const q = searchInput.value.toLowerCase().trim();
   let list = byTab(store.channels, tab);
   if (q) list = list.filter((c) => c.name.toLowerCase().includes(q));
 
-  const featured = list.find((c) => store.progress[c.id]) || list[0] || store.channels[0];
+  const featured = list.find((c) => store.progress[c.id]) || list[0] || null;
   setHero(featured);
 
-  if (!list.length) {
-    rows.innerHTML = '<div class="empty"><h3>' + emptyTitle() + '</h3><p>Carregue uma lista para começar</p><button class="btn-white" type="button" id="emptyLoad">Carregar lista</button></div>';
+  if (!store.channels.length) {
+    rows.innerHTML =
+      '<div class="empty">' +
+      '<h3>Nenhuma lista carregada</h3>' +
+      '<p>Big Buck Bunny e demos foram removidos. Carregue sua playlist por arquivo (recomendado), colar texto, link ou Xtream.</p>' +
+      '<button class="btn-white" type="button" id="emptyLoad">Carregar lista</button></div>';
     const btn = $('emptyLoad');
     if (btn) btn.addEventListener('click', openLoad);
+    return;
+  }
+
+  if (!list.length) {
+    rows.innerHTML = '<div class="empty"><h3>' + emptyTitle() + '</h3><p>Nada nesta categoria.</p></div>';
     return;
   }
 
@@ -346,16 +415,22 @@ function byTab(list, t) {
 function setHero(item) {
   current = item || null;
   if (!item) {
-    heroTitle.textContent = 'Carregue sua playlist';
-    heroText.textContent = 'Arquivo, link ou login Xtream.';
+    heroTitle.textContent = 'Carregue sua lista';
+    heroText.textContent = 'Arquivo M3U (melhor opção), colar, link ou login Xtream.';
     heroTag.textContent = 'Bem-vindo';
     heroImage.style.backgroundImage = 'none';
+    heroPlay.hidden = true;
+    heroLater.hidden = true;
+    heroLoad.hidden = false;
     return;
   }
   heroTitle.textContent = item.name;
   heroText.textContent = item.group ? typeLabel(item) + ' · ' + item.group : typeLabel(item);
   heroTag.textContent = tab === 'continue' ? 'Continuar' : item.type === 'live' ? 'Ao Vivo' : 'Destaque';
   heroImage.style.backgroundImage = 'url("' + (item.logo || avatar(item.name)) + '")';
+  heroPlay.hidden = false;
+  heroLater.hidden = false;
+  heroLoad.hidden = true;
   heroLater.classList.toggle('on', store.later.includes(item.id));
 }
 
@@ -377,22 +452,21 @@ function renderHome(list) {
   let html = '';
   if (cont.length) html += makeRow('Continuar Assistindo', cont, false);
   if (later.length) html += makeRow('Minha Lista', later, false);
-  if (live.length) html += makeRow('TV ao Vivo', live.slice(0, 40), true);
-  if (movies.length) html += makeRow('Filmes', movies.slice(0, 40), false);
-  if (series.length) html += makeRow('Séries', series.slice(0, 40), false);
+  if (live.length) html += makeRow('TV ao Vivo', live.slice(0, 50), true);
+  if (movies.length) html += makeRow('Filmes', movies.slice(0, 50), false);
+  if (series.length) html += makeRow('Séries', series.slice(0, 50), false);
 
   Object.keys(groups).forEach((g) => {
-    if (['Destaques', 'Demo', 'Demo Live'].includes(g)) return;
-    if (groups[g].length >= 4) html += makeRow(g, groups[g].slice(0, 30), groups[g][0].type === 'live');
+    if (groups[g].length >= 5) html += makeRow(g, groups[g].slice(0, 40), groups[g][0].type === 'live');
   });
 
-  if (!html) html = makeRow('Todos', list.slice(0, 40), false);
+  if (!html) html = makeRow('Todos', list.slice(0, 50), false);
   rows.innerHTML = html;
   bindUI();
 }
 
 function renderGrid(list) {
-  const titles = { live:'TV ao Vivo', movies:'Filmes', series:'Séries', continue:'Continuar Assistindo', watchlater:'Minha Lista' };
+  const titles = { live: 'TV ao Vivo', movies: 'Filmes', series: 'Séries', continue: 'Continuar Assistindo', watchlater: 'Minha Lista' };
   rows.innerHTML = makeRow(titles[tab] || 'Conteúdo', list, tab === 'live');
   bindUI();
 }
@@ -439,11 +513,10 @@ function bindUI() {
   });
 }
 
-/* PLAY */
 async function play(item) {
   current = item;
   store.last = item.id;
-  save();
+  saveStore();
   playerTitle.textContent = item.name;
   playerMeta.textContent = typeLabel(item) + (item.group ? ' · ' + item.group : '');
   btnLaterPlayer.classList.toggle('on', store.later.includes(item.id));
@@ -452,11 +525,10 @@ async function play(item) {
 
   let url = item.url;
 
-  // Series: fetch first episode if needed
   if (item.type === 'series' && item.seriesId && !url) {
     try {
       playerTitle.textContent = item.name + ' (carregando...)';
-      const info = await fetchJson(
+      const info = await fetchJsonAny(
         item.xtHost + '/player_api.php?username=' + encodeURIComponent(item.xtUser) +
         '&password=' + encodeURIComponent(item.xtPass) + '&action=get_series_info&series_id=' + item.seriesId
       );
@@ -466,13 +538,13 @@ async function play(item) {
       if (ep) {
         const ext = ep.container_extension || 'mp4';
         url = item.xtHost + '/series/' + item.xtUser + '/' + item.xtPass + '/' + ep.id + '.' + ext;
-        playerMeta.textContent = 'S' + firstSeason + 'E' + (ep.episode_num || '1') + ' · ' + (item.group || 'Séries');
+        playerMeta.textContent = 'S' + firstSeason + 'E' + (ep.episode_num || '1');
       } else {
         playerTitle.textContent = item.name + ' (sem episódios)';
         return;
       }
     } catch (e) {
-      playerTitle.textContent = item.name + ' (erro ao carregar série)';
+      playerTitle.textContent = item.name + ' (erro na série)';
       return;
     }
   }
@@ -484,7 +556,6 @@ async function play(item) {
 
   if (hls) { hls.destroy(); hls = null; }
   const start = store.progress[item.id]?.time || 0;
-
   const isHls = /\.m3u8($|\?)/i.test(url) || item.type === 'live';
 
   if (isHls && window.Hls && Hls.isSupported()) {
@@ -506,7 +577,6 @@ async function play(item) {
       video.play().catch(() => {});
     });
   } else {
-    // mp4 / direct
     video.src = url;
     video.addEventListener('loadedmetadata', function onMeta() {
       video.removeEventListener('loadedmetadata', onMeta);
@@ -514,7 +584,6 @@ async function play(item) {
       video.play().catch(() => {});
     });
   }
-
   playerTitle.textContent = item.name;
 }
 
@@ -533,35 +602,60 @@ function saveProgress(id, time, duration) {
   if (!id || !duration || isNaN(duration)) return;
   store.progress[id] = { time: Math.floor(time), duration: Math.floor(duration), updated: Date.now() };
   if (time / duration > 0.95) delete store.progress[id];
-  save();
+  saveStore();
 }
 
 function toggleLater(id) {
   const i = store.later.indexOf(id);
   if (i >= 0) store.later.splice(i, 1);
   else store.later.push(id);
-  save();
+  saveStore();
   heroLater.classList.toggle('on', store.later.includes(current?.id));
   btnLaterPlayer.classList.toggle('on', store.later.includes(current?.id));
   render();
 }
 
-/* M3U parse */
+/* Parser M3U mais tolerante */
 function parseM3U(text) {
-  const lines = text.split(/\r?\n/);
+  if (!text) return [];
+  const lines = String(text).replace(/^\uFEFF/, '').split(/\r?\n/);
   const out = [];
   let cur = null;
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
+    if (!line) continue;
+
     if (line.startsWith('#EXTINF:')) {
-      const name = (line.match(/,(.+)$/) || [])[1]?.trim() || 'Canal';
-      const logo = (line.match(/tvg-logo="([^"]*)"/i) || [])[1] || '';
-      const group = (line.match(/group-title="([^"]*)"/i) || [])[1] || 'Outros';
-      cur = { id: 'c_' + hash(name + logo + i), name, logo, group, type: detect(group, name), url: '' };
-    } else if (line && !line.startsWith('#') && cur) {
+      let name = 'Canal';
+      const comma = line.indexOf(',');
+      if (comma >= 0) name = line.slice(comma + 1).trim() || name;
+
+      const logo = (line.match(/tvg-logo="([^"]*)"/i) || line.match(/tvg-logo='([^']*)'/i) || [])[1] || '';
+      const group = (line.match(/group-title="([^"]*)"/i) || line.match(/group-title='([^']*)'/i) || [])[1] || 'Outros';
+
+      cur = {
+        id: 'c_' + hash(name + logo + i),
+        name,
+        logo,
+        group,
+        type: detect(group, name),
+        url: ''
+      };
+    } else if (!line.startsWith('#') && cur) {
       cur.url = line;
-      out.push(cur);
+      if (cur.url) out.push(cur);
       cur = null;
+    } else if (!line.startsWith('#') && /^https?:\/\//i.test(line)) {
+      // linha solta com URL
+      out.push({
+        id: 'c_' + hash(line + i),
+        name: 'Stream ' + (out.length + 1),
+        logo: '',
+        group: 'Outros',
+        type: 'live',
+        url: line
+      });
     }
   }
   return out;
@@ -578,12 +672,14 @@ function isSeries(g) { return /s[eé]rie|series|temporada|tv show/i.test(g || ''
 function isVod(g) { return isMovie(g) || isSeries(g); }
 function typeLabel(i) { return i.type === 'movie' ? 'Filme' : i.type === 'series' ? 'Série' : 'Ao Vivo'; }
 function fmt(s) { return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0'); }
-function hash(s) { let h = 0; for (let i = 0; i < s.length; i++) h = ((h << 5) - h) + s.charCodeAt(i) | 0; return Math.abs(h).toString(36); }
-function avatar(n) { return 'https://ui-avatars.com/api/?name=' + encodeURIComponent(n) + '&background=1a1a1a&color=e50914&size=400&font-size=0.33&bold=true'; }
+function hash(s) { let h = 0; for (let i = 0; i < String(s).length; i++) h = ((h << 5) - h) + s.charCodeAt(i) | 0; return Math.abs(h).toString(36); }
+function avatar(n) {
+  return 'https://ui-avatars.com/api/?name=' + encodeURIComponent(n || '?') + '&background=1a1a1a&color=e50914&size=400&font-size=0.33&bold=true';
+}
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
-function attr(s) { return (s || '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
+function attr(s) { return String(s || '').replace(/"/g, '&quot;').replace(/</g, '&lt;'); }
 function emptyTitle() {
   if (tab === 'continue') return 'Nada para continuar';
-  if (tab === 'watchlater') return 'Sua lista está vazia';
-  return 'Nenhum conteúdo';
+  if (tab === 'watchlater') return 'Lista vazia';
+  return 'Nenhum item';
 }
