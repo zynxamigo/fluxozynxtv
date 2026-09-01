@@ -17,7 +17,7 @@
       <div class="nav-inner">
         <a class="logo" id="logoHome" href="#">FLUXO<span>ZYNX</span>TV</a>
 
-        <div class="nav-links" id="navLinks">
+        <div class="nav-links">
           <button class="nav-btn active" data-tab="home">Início</button>
           <button class="nav-btn" data-tab="live">TV ao Vivo</button>
           <button class="nav-btn" data-tab="movies">Filmes</button>
@@ -27,13 +27,16 @@
         </div>
 
         <div class="nav-actions">
+          <select class="profile-select" id="profileSelect" title="Perfil / lista">
+            <option value="">Sem perfil</option>
+          </select>
           <div class="search-box" id="searchBox">
             <button class="icon-btn" id="btnSearch" type="button" aria-label="Buscar">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             </button>
-            <input type="text" id="searchInput" placeholder="Títulos, canais..." autocomplete="off">
+            <input type="text" id="searchInput" placeholder="Buscar..." autocomplete="off">
           </div>
-          <button class="icon-btn" id="btnOpenLoad" type="button" title="Carregar lista">
+          <button class="icon-btn" id="btnOpenLoad" type="button" title="Listas e perfis">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
           </button>
         </div>
@@ -45,71 +48,80 @@
       <div class="hero-shade"></div>
       <div class="hero-body">
         <span class="hero-tag" id="heroTag">Bem-vindo</span>
-        <h1 class="hero-title" id="heroTitle">Carregue sua lista</h1>
-        <p class="hero-text" id="heroText">Arquivo M3U, colar texto, link ou login Xtream.</p>
+        <h1 class="hero-title" id="heroTitle">Suas listas IPTV</h1>
+        <p class="hero-text" id="heroText">Cole seus blocos salvos, teste os links M3U e use só o que funciona.</p>
         <div class="hero-btns">
-          <button class="btn-white" id="heroLoad" type="button">Carregar lista</button>
-          <button class="btn-gray" id="heroPlay" type="button" hidden>
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-            Assistir
-          </button>
+          <button class="btn-white" id="heroLoad" type="button">Gerenciar listas</button>
+          <button class="btn-gray" id="heroPlay" type="button" hidden>Assistir</button>
           <button class="btn-gray" id="heroLater" type="button" hidden>Minha Lista</button>
         </div>
       </div>
     </header>
 
-    <main class="main" id="main">
+    <main class="main">
       <div id="rows"></div>
     </main>
 
-    <!-- MODAL CARREGAR -->
+    <!-- MODAL -->
     <div class="modal" id="loadModal" hidden>
-      <div class="modal-box">
+      <div class="modal-box modal-wide">
         <div class="modal-head">
-          <h2>Carregar lista</h2>
+          <h2>Listas e perfis</h2>
           <button class="modal-x" id="loadClose" type="button">&times;</button>
         </div>
 
         <div class="load-tabs">
-          <button class="load-tab active" data-load="file" type="button">Arquivo</button>
-          <button class="load-tab" data-load="paste" type="button">Colar</button>
+          <button class="load-tab active" data-load="bulk" type="button">Colar blocos</button>
+          <button class="load-tab" data-load="profiles" type="button">Perfis</button>
+          <button class="load-tab" data-load="file" type="button">Arquivo</button>
           <button class="load-tab" data-load="url" type="button">Link</button>
           <button class="load-tab" data-load="xtream" type="button">Xtream</button>
         </div>
 
-        <div class="load-panel active" id="panelFile">
-          <p class="load-hint">Funciona <strong>sempre</strong>. Baixe o .m3u no painel do seu provedor e envie aqui.</p>
+        <!-- COLAR BLOCOS -->
+        <div class="load-panel active" id="panelBulk">
+          <p class="load-hint">Cole um ou vários blocos no formato que você salva. O site pega só o <strong>Link M3U</strong> (e servidor/user se tiver), testa e cria perfil dos que funcionarem.</p>
+          <textarea id="bulkInput" class="field area" rows="12" placeholder="[FATALITY HIT #1]&#10;📡 Servidor: http://...&#10;👤 Usuário: ...&#10;🔐 Senha: ...&#10;🔗 Link M3U: http://.../get.php?username=...&#10;━━━━━━━━━━&#10;&#10;[outra lista]&#10;🔗 Link M3U: https://..."></textarea>
+          <div class="btn-row">
+            <button class="btn-red" id="btnParseTest" type="button">Extrair e testar links</button>
+          </div>
+          <div id="testResults" class="test-results" hidden></div>
+        </div>
+
+        <!-- PERFIS -->
+        <div class="load-panel" id="panelProfiles">
+          <p class="load-hint">Perfis que passaram no teste. Clique em <strong>Usar</strong> para carregar os canais desse link.</p>
+          <div id="profilesList" class="profiles-list"></div>
+          <button class="btn-gray btn-full" id="btnRetestAll" type="button">Testar todos de novo</button>
+        </div>
+
+        <!-- ARQUIVO -->
+        <div class="load-panel" id="panelFile">
+          <p class="load-hint">Se o link não abrir no site, baixe o .m3u e envie aqui. Cria um perfil local.</p>
           <label class="file-drop" id="fileDrop">
             <input type="file" id="m3uFile" accept=".m3u,.m3u8,.txt,text/plain" hidden>
-            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             <span>Clique ou arraste o arquivo .m3u</span>
           </label>
+          <input type="text" id="fileProfileName" class="field" placeholder="Nome do perfil (opcional)" style="margin-top:12px">
         </div>
 
-        <div class="load-panel" id="panelPaste">
-          <p class="load-hint">Cole o conteúdo completo da playlist (texto começando com #EXTM3U).</p>
-          <textarea id="pasteInput" class="field area" placeholder="#EXTM3U&#10;#EXTINF:-1,Canal Exemplo&#10;http://..." rows="8"></textarea>
-          <button class="btn-red" id="btnLoadPaste" type="button">Carregar texto</button>
-        </div>
-
+        <!-- URL -->
         <div class="load-panel" id="panelUrl">
-          <p class="load-hint">Cole o link da playlist. Se der erro de CORS, use <strong>Arquivo</strong> ou <strong>Colar</strong>.</p>
-          <input type="url" id="urlInput" class="field" placeholder="https://.../lista.m3u" autocomplete="off">
-          <button class="btn-red" id="btnLoadUrl" type="button">Carregar link</button>
+          <p class="load-hint">Um link M3U avulso. Será testado e, se ok, vira perfil.</p>
+          <input type="url" id="urlInput" class="field" placeholder="https://.../lista.m3u">
+          <input type="text" id="urlProfileName" class="field" placeholder="Nome do perfil (opcional)">
+          <button class="btn-red" id="btnLoadUrl" type="button">Testar e adicionar</button>
         </div>
 
+        <!-- XTREAM -->
         <div class="load-panel" id="panelXtream">
-          <p class="load-hint">DNS + usuário + senha. Se o servidor bloquear o navegador, use o botão de gerar link M3U e baixe o arquivo.</p>
-          <input type="text" id="xtHost" class="field" placeholder="http://servidor.com:8080" autocomplete="off">
-          <input type="text" id="xtUser" class="field" placeholder="Usuário" autocomplete="username">
-          <input type="password" id="xtPass" class="field" placeholder="Senha" autocomplete="current-password">
-          <div class="xt-options">
-            <label><input type="checkbox" id="xtLive" checked> Live</label>
-            <label><input type="checkbox" id="xtVod" checked> Filmes</label>
-            <label><input type="checkbox" id="xtSeries" checked> Séries</label>
-          </div>
-          <button class="btn-red" id="btnLoadXtream" type="button">Conectar API</button>
-          <button class="btn-gray btn-full" id="btnXtreamM3U" type="button">Gerar link M3U (baixar)</button>
+          <p class="load-hint">Gera o link M3U padrão e testa. Ou abra o link e baixe o arquivo.</p>
+          <input type="text" id="xtHost" class="field" placeholder="http://servidor.com:8080">
+          <input type="text" id="xtUser" class="field" placeholder="Usuário">
+          <input type="password" id="xtPass" class="field" placeholder="Senha">
+          <input type="text" id="xtName" class="field" placeholder="Nome do perfil (opcional)">
+          <button class="btn-red" id="btnLoadXtream" type="button">Testar M3U do painel</button>
+          <button class="btn-gray btn-full" id="btnXtreamOpen" type="button">Abrir link M3U (baixar)</button>
         </div>
 
         <p class="load-status" id="loadStatus" hidden></p>
@@ -130,11 +142,8 @@
       </div>
     </div>
 
-    <footer class="footer">
-      FluxoZynxTV · Dados salvos só neste navegador · Use conteúdo legítimo
-    </footer>
+    <footer class="footer">FluxoZynxTV · Perfis e progresso só neste navegador · Use listas que você contratou</footer>
   </div>
-
   <script src="script.js"></script>
 </body>
 </html>
