@@ -1,4 +1,4 @@
-const KEY = 'fluxozynxtv_v6';
+const KEY = 'fluxozynxtv_v7';
 
 function loadStore() {
   try {
@@ -22,7 +22,7 @@ let store = loadStore();
 let tab = 'home';
 let current = null;
 let hls = null;
-let lastParsed = []; // resultados do último teste em memória
+let lastParsed = [];
 
 const $ = (id) => document.getElementById(id);
 const navbar = $('navbar');
@@ -79,7 +79,6 @@ profileSelect.addEventListener('change', async () => {
   await activateProfile(id);
 });
 
-/* modal */
 function openLoad() {
   loadModal.hidden = false;
   setStatus('');
@@ -110,79 +109,140 @@ function setStatus(msg, type) {
   loadStatus.className = 'load-status ' + (type || 'info');
 }
 
-/* ===== EXTRAIR BLOCOS DO USUÁRIO ===== */
-function extractFromBulk(text) {
-  const blocks = [];
-  // split por linhas de traço ou por [TÍTULO]
-  const parts = text.split(/(?=\[[^\]]+\])|(?=━{5,})|(?=_{5,})|(?=-{10,})/i).filter((p) => p.trim().length > 15);
+/* ========== EXTRAIR SÓ LINKS M3U ========== */
 
-  const tryOne = (chunk, idx) => {
-    const m3u =
-      matchField(chunk, /Link\s*M3U\s*[:：]\s*(.+)/i) ||
-      matchField(chunk, /M3U\s*[:：]\s*(https?:\/\/\S+)/i) ||
-      matchField(chunk, /(https?:\/\/[^\s"']+get\.php[^\s"']*)/i) ||
-      matchField(chunk, /(https?:\/\/[^\s"']+\.(m3u8?|txt)(?:\?[^\s"']*)?)/i);
+/** Junta linhas quebradas de URL (comum no seu formato) */
+function normalizeText(text) {
+  let t = String(text || '').replace(/\r/g, '');
+  // junta URL quebrada depois de get.php? ou & no fim da linha
+  t = t.replace(/(https?:\/\/[^\s\n]*?)\n\s*/gi, '$1');
+  t = t.replace(/(get\.php\?)\s*\n\s*/gi, '$1');
+  t = t.replace(/(&)\s*\n\s*/g, '$1');
+  t = t.replace(/(username=)\s*\n\s*/gi, '$1');
+  t = t.replace(/(password=)\s*\n\s*/gi, '$1');
+  return t;
+}
 
-    if (!m3u) return null;
+/** Encontra todas as URLs que parecem playlist M3U / get.php */
+function findM3ULinks(text) {
+  const t = normalizeText(text);
+  const found = [];
+  const seen = new Set();
 
-    const server = matchField(chunk, /Servidor\s*[:：]\s*(.+)/i) || matchField(chunk, /Server\s*[:：]\s*(.+)/i);
-    const user = matchField(chunk, /Usu[aá]rio\s*[:：]\s*(.+)/i) || matchField(chunk, /User(?:name)?\s*[:：]\s*(.+)/i);
-    const pass = matchField(chunk, /Senha\s*[:：]\s*(.+)/i) || matchField(chunk, /Pass(?:word)?\s*[:：]\s*(.+)/i);
-    const status = matchField(chunk, /Status\s*[:：]\s*(.+)/i);
-    const expira = matchField(chunk, /Expira(?:\s*em)?\s*[:：]\s*(.+)/i);
-    const title =
-      (chunk.match(/\[([^\]]+)\]/) || [])[1] ||
-      (server ? hostLabel(server) : null) ||
-      'Lista ' + (idx + 1);
-
-    return {
-      name: clean(title),
-      m3u: cleanUrl(m3u),
-      server: server ? clean(server) : '',
-      user: user ? clean(user) : '',
-      pass: pass ? clean(pass) : '',
-      status: status ? clean(status) : '',
-      expira: expira ? clean(expira) : ''
-    };
+  const push = (raw, nameHint) => {
+    let u = String(raw || '').trim();
+    u = u.replace(/[<>"'`]/g, '').replace(/[.,;\])\]}]+$/, '');
+    // completa se começou sem protocolo mas tem get.php
+    if (!/^https?:\/\//i.test(u) && /get\.php/i.test(u)) {
+      u = 'http://' + u.replace(/^\/+/, '');
+    }
+    if (!/^https?:\/\//i.test(u)) return;
+    // só aceita se parece lista IPTV
+    const isList =
+      /get\.php/i.test(u) ||
+      /\.m3u8?(?:$|\?)/i.test(u) ||
+      /[?&](username|password|type)=/i.test(u) ||
+      /m3u/i.test(u);
+    if (!isList) return;
+    const key = u.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    found.push({ url: u, nameHint: nameHint || '' });
   };
 
-  if (parts.length) {
-    parts.forEach((p, i) => {
-      const o = tryOne(p, i);
-      if (o) blocks.push(o);
+  // 1) Linha explícita "Link M3U: ..."
+  const lineRe = /Link\s*M3U\s*[:：]\s*(.+)/gi;
+  let m;
+  while ((m = lineRe.exec(t)) !== null) {
+    let rest = m[1].trim();
+    // pega URL até espaço ou emoji de próxima linha lógica
+    const urlMatch = rest.match(/https?:\/\/\S+/i) || rest.match(/\S*get\.php\S*/i);
+    if (urlMatch) push(urlMatch[0]);
+  }
+
+  // 2) Qualquer get.php com query
+  const getRe = /https?:\/\/[^\s"'<>]*get\.php\?[^\s"'<>]*/gi;
+  while ((m = getRe.exec(t)) !== null) push(m[0]);
+
+  // 3) .m3u / .m3u8
+  const m3uRe = /https?:\/\/[^\s"'<>]+\.m3u8?(?:\?[^\s"'<>]*)?/gi;
+  while ((m = m3uRe.exec(t)) !== null) push(m[0]);
+
+  return found;
+}
+
+/** Monta objetos de perfil a partir do texto colado */
+function extractFromBulk(text) {
+  const norm = normalizeText(text);
+  const links = findM3ULinks(norm);
+  if (!links.length) return [];
+
+  // tenta associar cada link a um bloco [NOME] / servidor / user
+  const blocks = [];
+  const parts = norm.split(/(?=\[[^\]\n]{1,80}\])/).filter((p) => p.trim());
+
+  const parseMeta = (chunk) => {
+    const title = ((chunk.match(/\[([^\]]+)\]/) || [])[1] || '').trim();
+    const server = (chunk.match(/Servidor\s*[:：]\s*(\S+)/i) || [])[1] || '';
+    const user = (chunk.match(/Usu[aá]rio\s*[:：]\s*(\S+)/i) || chunk.match(/User(?:name)?\s*[:：]\s*(\S+)/i) || [])[1] || '';
+    const pass = (chunk.match(/Senha\s*[:：]\s*(\S+)/i) || chunk.match(/Pass(?:word)?\s*[:：]\s*(\S+)/i) || [])[1] || '';
+    const status = (chunk.match(/Status\s*[:：]\s*([^\n]+)/i) || [])[1] || '';
+    const expira = (chunk.match(/Expira[^\n]*[:：]\s*([^\n]+)/i) || [])[1] || '';
+    return { title, server: clean(server), user: clean(user), pass: clean(pass), status: clean(status), expira: clean(expira) };
+  };
+
+  if (parts.length > 1) {
+    parts.forEach((chunk, i) => {
+      const localLinks = findM3ULinks(chunk);
+      const meta = parseMeta(chunk);
+      localLinks.forEach((L, j) => {
+        blocks.push({
+          name: meta.title || hostLabel(L.url) || ('Lista ' + (i + 1)),
+          m3u: L.url,
+          server: meta.server,
+          user: meta.user,
+          pass: meta.pass,
+          status: meta.status,
+          expira: meta.expira
+        });
+      });
     });
   }
 
-  // fallback: texto inteiro
+  // se não achou por bloco, usa lista global de links
   if (!blocks.length) {
-    const o = tryOne(text, 0);
-    if (o) blocks.push(o);
+    const meta = parseMeta(norm);
+    links.forEach((L, i) => {
+      blocks.push({
+        name: meta.title || hostLabel(L.url) || ('Lista ' + (i + 1)),
+        m3u: L.url,
+        server: meta.server,
+        user: meta.user,
+        pass: meta.pass,
+        status: meta.status,
+        expira: meta.expira
+      });
+    });
   }
 
-  // dedupe por m3u
+  // dedupe por URL
   const seen = new Set();
   return blocks.filter((b) => {
-    if (seen.has(b.m3u)) return false;
-    seen.add(b.m3u);
+    const k = b.m3u.toLowerCase();
+    if (seen.has(k)) return false;
+    seen.add(k);
     return true;
   });
 }
 
-function matchField(text, re) {
-  const m = text.match(re);
-  return m ? m[1].trim() : null;
-}
 function clean(s) {
-  return String(s).replace(/[📡👤🔐💎📆🔗💀📃📅]/g, '').replace(/━+/g, '').trim();
-}
-function cleanUrl(s) {
-  return clean(s).replace(/[<>"']/g, '').split(/\s/)[0];
+  return String(s || '').replace(/[📡👤🔐💎📆🔗💀📃📅]/g, '').replace(/━+/g, '').trim();
 }
 function hostLabel(u) {
-  try { return new URL(/^https?:/i.test(u) ? u : 'http://' + u).hostname; } catch (e) { return u; }
+  try { return new URL(/^https?:/i.test(u) ? u : 'http://' + u).hostname; } catch (e) { return 'Lista'; }
 }
 
-/* ===== FETCH / TESTE M3U ===== */
+/* fetch / test */
 async function fetchText(url) {
   const attempts = [
     url,
@@ -207,28 +267,49 @@ async function fetchText(url) {
 async function testM3U(url) {
   try {
     const text = await fetchText(url);
+    // se veio HTML de erro, falha
+    if (/<html/i.test(text) && !/#EXTM3U/i.test(text)) {
+      return { ok: false, reason: 'Servidor devolveu página, não M3U', channels: [], count: 0 };
+    }
     const channels = parseM3U(text);
     if (!channels.length) {
-      return { ok: false, reason: 'Resposta sem canais válidos', channels: [], count: 0, raw: text.slice(0, 200) };
+      return { ok: false, reason: 'Baixou mas sem canais no M3U', channels: [], count: 0 };
     }
     return { ok: true, reason: channels.length + ' itens', channels, count: channels.length };
   } catch (e) {
-    return { ok: false, reason: 'Não baixou (CORS/servidor/offline)', channels: [], count: 0 };
+    return { ok: false, reason: 'Não baixou no navegador (CORS/offline)', channels: [], count: 0 };
   }
 }
 
-/* Colar e testar */
+/* Colar blocos */
 $('btnParseTest').addEventListener('click', async () => {
   const text = $('bulkInput').value.trim();
   if (!text) { setStatus('Cole seus blocos salvos', 'err'); return; }
 
-  const extracted = extractFromBulk(text);
-  if (!extracted.length) {
-    setStatus('Nenhum Link M3U encontrado. Confira se tem a linha "Link M3U: http..."', 'err');
+  // Se for playlist crua #EXTM3U, trata diferente
+  if (/#EXTM3U/i.test(text) && /#EXTINF/i.test(text)) {
+    const channels = parseM3U(text);
+    if (!channels.length) { setStatus('Texto M3U sem canais', 'err'); return; }
+    const entry = {
+      id: 'p_' + hash('paste' + Date.now()),
+      name: 'Lista colada',
+      m3u: 'local://paste',
+      ok: true,
+      channels,
+      count: channels.length
+    };
+    saveAndUseProfile(entry);
     return;
   }
 
-  setStatus('Encontrei ' + extracted.length + ' link(s). Testando...', 'info');
+  const extracted = extractFromBulk(text);
+  if (!extracted.length) {
+    setStatus('Não achei nenhum Link M3U. Precisa ter algo como: Link M3U: http://servidor/get.php?username=...', 'err');
+    return;
+  }
+
+  // mostra os links extraídos antes de testar
+  setStatus('Extraí ' + extracted.length + ' link(s) M3U. Testando...', 'info');
   $('btnParseTest').disabled = true;
   testResults.hidden = false;
   testResults.innerHTML = '';
@@ -240,7 +321,7 @@ $('btnParseTest').addEventListener('click', async () => {
     card.className = 'test-card';
     card.innerHTML =
       '<div class="t-name">' + esc(item.name) + '</div>' +
-      '<div class="t-meta">' + esc(item.m3u) + '</div>' +
+      '<div class="t-meta">🔗 ' + esc(item.m3u) + '</div>' +
       '<div class="t-status">Testando...</div>';
     testResults.appendChild(card);
 
@@ -255,25 +336,41 @@ $('btnParseTest').addEventListener('click', async () => {
 
     const actions = document.createElement('div');
     actions.className = 'test-actions';
+
+    // sempre mostra o link limpo extraído
+    const copyBtn = document.createElement('button');
+    copyBtn.type = 'button';
+    copyBtn.className = 'btn-fail';
+    copyBtn.textContent = 'Copiar link';
+    copyBtn.onclick = async () => {
+      try { await navigator.clipboard.writeText(item.m3u); copyBtn.textContent = 'Copiado!'; } catch (e) {}
+    };
+    actions.appendChild(copyBtn);
+
     if (result.ok) {
       const b1 = document.createElement('button');
       b1.className = 'btn-use';
       b1.type = 'button';
-      b1.textContent = 'Salvar perfil e usar';
+      b1.textContent = 'Salvar e usar';
       b1.onclick = () => saveAndUseProfile(entry);
       actions.appendChild(b1);
 
       const b2 = document.createElement('button');
       b2.className = 'btn-ok';
       b2.type = 'button';
-      b2.textContent = 'Só salvar perfil';
-      b2.onclick = () => { saveProfile(entry, false); setStatus('Perfil salvo: ' + entry.name, 'ok'); renderProfilesPanel(); refreshProfileSelect(); };
+      b2.textContent = 'Só salvar';
+      b2.onclick = () => {
+        saveProfile(entry, false);
+        setStatus('Perfil salvo: ' + entry.name, 'ok');
+        renderProfilesPanel();
+        refreshProfileSelect();
+      };
       actions.appendChild(b2);
     } else {
       const b = document.createElement('button');
       b.className = 'btn-fail';
       b.type = 'button';
-      b.textContent = 'Abrir link (baixar M3U)';
+      b.textContent = 'Abrir / baixar M3U';
       b.onclick = () => window.open(item.m3u, '_blank');
       actions.appendChild(b);
     }
@@ -281,7 +378,11 @@ $('btnParseTest').addEventListener('click', async () => {
   }
 
   const okN = lastParsed.filter((x) => x.ok).length;
-  setStatus('Teste ok: ' + okN + '/' + lastParsed.length + ' link(s). Salve os que funcionaram.', okN ? 'ok' : 'err');
+  setStatus(
+    'Links encontrados: ' + lastParsed.length + ' · Funcionando no site: ' + okN +
+    (okN ? '' : ' — use "Abrir / baixar M3U" e depois a aba Arquivo'),
+    okN ? 'ok' : 'err'
+  );
   $('btnParseTest').disabled = false;
 });
 
@@ -307,15 +408,14 @@ function saveProfile(entry, activate) {
 
 function saveAndUseProfile(entry) {
   saveProfile(entry, true);
-  setStatus('Perfil ativo: ' + entry.name + ' (' + entry.count + ' itens)', 'ok');
-  setTimeout(() => closeLoad(), 500);
+  setStatus('Perfil ativo: ' + entry.name + ' (' + (entry.count || 0) + ' itens)', 'ok');
+  setTimeout(() => closeLoad(), 400);
 }
 
 async function activateProfile(id) {
   const p = store.profiles.find((x) => x.id === id);
   if (!p) return;
 
-  // se já tem channels em cache, usa; senão baixa de novo
   if (p.channels && p.channels.length) {
     store.channels = p.channels;
     store.activeProfileId = p.id;
@@ -325,12 +425,17 @@ async function activateProfile(id) {
     return;
   }
 
+  if (String(p.m3u).startsWith('local://')) {
+    setStatus('Esse perfil é de arquivo local — carregue o arquivo de novo na aba Arquivo.', 'err');
+    return;
+  }
+
   setStatus('Carregando lista do perfil...', 'info');
   const result = await testM3U(p.m3u);
   if (!result.ok) {
     p.status = 'fail';
     saveStore();
-    setStatus('Esse link não baixou agora. Baixe o M3U e use a aba Arquivo.', 'err');
+    setStatus('Link não baixou. Abra o M3U no navegador, salve o arquivo e use a aba Arquivo.', 'err');
     renderProfilesPanel();
     return;
   }
@@ -347,7 +452,7 @@ async function activateProfile(id) {
 
 function renderProfilesPanel() {
   if (!store.profiles.length) {
-    profilesList.innerHTML = '<p class="load-hint">Nenhum perfil ainda. Use "Colar blocos" ou Arquivo/Link.</p>';
+    profilesList.innerHTML = '<p class="load-hint">Nenhum perfil ainda.</p>';
     return;
   }
   profilesList.innerHTML = store.profiles.map((p) => {
@@ -391,8 +496,9 @@ function refreshProfileSelect() {
 
 $('btnRetestAll').addEventListener('click', async () => {
   if (!store.profiles.length) return;
-  setStatus('Retestando perfis...', 'info');
+  setStatus('Retestando...', 'info');
   for (const p of store.profiles) {
+    if (String(p.m3u).startsWith('local://')) continue;
     const r = await testM3U(p.m3u);
     p.status = r.ok ? 'ok' : 'fail';
     p.count = r.count;
@@ -417,8 +523,14 @@ m3uFile.addEventListener('change', (e) => {
       const channels = parseM3U(String(ev.target.result || ''));
       if (!channels.length) { setStatus('Arquivo sem canais', 'err'); return; }
       const name = $('fileProfileName').value.trim() || f.name.replace(/\.m3u8?$/i, '') || 'Arquivo local';
-      const entry = { id: 'p_' + hash(name + Date.now()), name, m3u: 'local://' + f.name, ok: true, channels, count: channels.length };
-      saveAndUseProfile(entry);
+      saveAndUseProfile({
+        id: 'p_' + hash(name + Date.now()),
+        name,
+        m3u: 'local://' + f.name,
+        ok: true,
+        channels,
+        count: channels.length
+      });
     };
     reader.readAsText(f);
   }
@@ -431,22 +543,24 @@ fileDrop.addEventListener('drop', (e) => {
   fileDrop.classList.remove('drag');
   const f = e.dataTransfer.files && e.dataTransfer.files[0];
   if (f) {
-    m3uFile.files = e.dataTransfer.files;
+    const dt = new DataTransfer();
+    dt.items.add(f);
+    m3uFile.files = dt.files;
     m3uFile.dispatchEvent(new Event('change'));
   }
 });
 
-/* URL avulsa */
+/* URL */
 $('btnLoadUrl').addEventListener('click', async () => {
   let url = $('urlInput').value.trim();
   if (!url) { setStatus('Cole o link M3U', 'err'); return; }
   if (!/^https?:\/\//i.test(url)) url = 'http://' + url;
-  setStatus('Testando link...', 'info');
+  setStatus('Testando...', 'info');
   $('btnLoadUrl').disabled = true;
   const r = await testM3U(url);
   $('btnLoadUrl').disabled = false;
   if (!r.ok) {
-    setStatus('Link não funcionou no navegador. Baixe o arquivo e use a aba Arquivo.', 'err');
+    setStatus('Não funcionou no site. Baixe o M3U e use Arquivo.', 'err');
     return;
   }
   const name = $('urlProfileName').value.trim() || hostLabel(url);
@@ -463,12 +577,12 @@ $('btnLoadXtream').addEventListener('click', async () => {
   const c = readXt();
   if (!c) return;
   const m3u = c.host + '/get.php?username=' + encodeURIComponent(c.user) + '&password=' + encodeURIComponent(c.pass) + '&type=m3u_plus&output=ts';
-  setStatus('Testando M3U do painel...', 'info');
+  setStatus('Testando M3U...', 'info');
   $('btnLoadXtream').disabled = true;
   const r = await testM3U(m3u);
   $('btnLoadXtream').disabled = false;
   if (!r.ok) {
-    setStatus('Não baixou no site. Use "Abrir link M3U" → salve o arquivo → aba Arquivo.', 'err');
+    setStatus('Falhou no site. Use "Abrir link M3U" → baixe → Arquivo.', 'err');
     return;
   }
   const name = $('xtName').value.trim() || hostLabel(c.host);
@@ -514,7 +628,6 @@ document.addEventListener('keydown', (e) => {
 refreshProfileSelect();
 render();
 
-/* RENDER */
 function render() {
   const q = searchInput.value.toLowerCase().trim();
   let list = byTab(store.channels, tab);
@@ -524,7 +637,7 @@ function render() {
   if (!store.channels.length) {
     rows.innerHTML =
       '<div class="empty"><h3>Nenhuma lista ativa</h3>' +
-      '<p>Cole seus blocos com Link M3U, teste quais funcionam e salve como perfis. Se o navegador bloquear, baixe o arquivo e use a aba Arquivo.</p>' +
+      '<p>Aba <strong>Colar blocos</strong>: cole seu texto. O site pega só o Link M3U, testa e cria perfil.</p>' +
       '<button class="btn-white" type="button" id="emptyLoad">Gerenciar listas</button></div>';
     const b = $('emptyLoad');
     if (b) b.addEventListener('click', openLoad);
@@ -557,7 +670,7 @@ function setHero(item) {
   const prof = store.profiles.find((p) => p.id === store.activeProfileId);
   if (!item) {
     heroTitle.textContent = 'Suas listas IPTV';
-    heroText.textContent = prof ? ('Perfil: ' + prof.name + ' — recarregue ou troque no menu') : 'Cole blocos, teste M3U e salve perfis.';
+    heroText.textContent = 'Cole o bloco → o site pega só o Link M3U.';
     heroTag.textContent = 'Bem-vindo';
     heroImage.style.backgroundImage = 'none';
     heroPlay.hidden = true;
@@ -634,12 +747,10 @@ function play(item) {
   btnLaterPlayer.classList.toggle('on', store.later.includes(item.id));
   playerOverlay.hidden = false;
   document.body.style.overflow = 'hidden';
-
   if (!item.url) { playerTitle.textContent = item.name + ' (sem URL)'; return; }
   if (hls) { hls.destroy(); hls = null; }
   const start = store.progress[item.id]?.time || 0;
   const isHls = /\.m3u8($|\?)/i.test(item.url) || item.type === 'live';
-
   if (isHls && window.Hls && Hls.isSupported()) {
     hls = new Hls({ enableWorker: true, lowLatencyMode: true });
     hls.loadSource(item.url);
